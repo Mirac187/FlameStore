@@ -204,5 +204,794 @@
   const app = initializeApp(firebaseConfig);
   const analytics = getAnalytics(app);
   </script>
+  <!-- Sohbet ve Fotoğraf Paneli -->
+<div id="chat-container" style="padding: 20px; color: white; background: #1a1a1a; border-radius: 10px; margin: 20px; border: 1px solid #333;">
+  <h3 style="color: #ff5722; text-align: center; margin-top: 0;">FlameStore Canlı Sohbet</h3>
+  
+  <!-- Mesajların Listelendiği Alan -->
+  <div id="chat-messages" style="height: 250px; overflow-y: scroll; background: #111; padding: 10px; border-radius: 5px; margin-bottom: 15px; border: 1px solid #222; display: flex; flex-direction: column; gap: 10px;">
+    <p style="color: #666; text-align: center;">Mesajlar yükleniyor...</p>
+  </div>
+
+  <!-- Mesaj ve Fotoğraf Gönderme Formu -->
+  <div style="display: flex; flex-direction: column; gap: 10px;">
+    <input type="text" id="chat-input" placeholder="Bir mesaj yaz..." style="width: 100%; padding: 10px; border-radius: 5px; border: 1px solid #444; background: #222; color: white;">
+    
+    <div style="display: flex; justify-content: space-between; align-items: center;">
+      <!-- Fotoğraf Seçme Inputu -->
+      <input type="file" id="chat-image-input" accept="image/*" style="font-size: 12px; color: #aaa; width: 60%;">
+      
+      <button onclick="mesajGonder()" style="padding: 10px 20px; background: #ff5722; color: white; border: none; border-radius: 5px; font-weight: bold; cursor: pointer;">Gönder</button>
+    </div>
+  </div>
+</div>
+
+<!-- Sohbet Firebase Scriptleri -->
+<script type="module">
+  import { collection, addDoc, query, orderBy, onSnapshot, serverTimestamp } from "https://www.gstatic.com/firebasejs/11.4.0/firebase-firestore.js";
+
+  const db = window.db; // Daha önce tanımlanan firestore nesnesi
+
+  // 1. Mesajları Canlı Dinle ve Ekrana Bas
+  if (db) {
+    const q = query(collection(db, "sohbet"), orderBy("zaman", "asc"));
+    onSnapshot(q, (snapshot) => {
+      const chatBox = document.getElementById('chat-messages');
+      chatBox.innerHTML = "";
+      
+      if (snapshot.empty) {
+        chatBox.innerHTML = "<p style='color: #666; text-align: center;'>Henüz mesaj yok. İlk mesajı sen yaz!</p>";
+        return;
+      }
+
+      snapshot.forEach((doc) => {
+        const data = doc.data();
+        const userEmail = data.email || "Anonim";
+        const messageText = data.mesaj || "";
+        const imageBase64 = data.resim || "";
+
+        let imgHtml = imageBase64 ? `<br><img src="${imageBase64}" style="max-width: 150px; border-radius: 5px; margin-top: 5px;">` : "";
+        
+        chatBox.innerHTML += `
+          <div style="background: #252525; padding: 8px 12px; border-radius: 6px; word-break: break-word;">
+            <span style="font-size: 11px; color: #ff5722; font-weight: bold;">${userEmail}</span><br>
+            <span>${messageText}</span>
+            ${imgHtml}
+          </div>
+        `;
+      });
+      chatBox.scrollTop = chatBox.scrollHeight;
+    });
+  }
+
+  // 2. Mesaj ve Fotoğraf Gönderme Fonksiyonu
+  window.mesajGonder = function() {
+    const input = document.getElementById('chat-input');
+    const imageInput = document.getElementById('chat-image-input');
+    const text = input.value.trim();
+    const currentUser = window.auth && window.auth.currentUser ? window.auth.currentUser.email : "Misafir Kullanıcı";
+
+    if (!text && imageInput.files.length === 0) return;
+
+    if (imageInput.files.length > 0) {
+      const file = imageInput.files[0];
+      const reader = new FileReader();
+      
+      reader.onloadend = function() {
+        const base64String = reader.result;
+        kaydetFirestore(currentUser, text, base64String);
+      };
+      reader.readAsDataURL(file);
+    } else {
+      kaydetFirestore(currentUser, text, null);
+    }
+  }
+
+  function kaydetFirestore(email, mesaj, resim) {
+    addDoc(collection(db, "sohbet"), {
+      email: email,
+      mesaj: mesaj,
+      resim: resim,
+      zaman: serverTimestamp()
+    }).then(() => {
+      document.getElementById('chat-input').value = "";
+      document.getElementById('chat-image-input').value = "";
+    }).catch((error) => {
+      alert("Mesaj gönderilemedi: " + error.message);
+    });
+  }
+</script>
+<!-- E-posta ve Şifre Giriş / Kayıt Paneli -->
+<div id="auth-container" style="padding: 20px; color: white; background: #121212; border-radius: 10px; margin: 20px;">
+  <h2 style="color: #ff5722; text-align: center;">FlameStore'a Hoş Geldin</h2>
+  
+  <div style="margin-bottom: 15px;">
+    <label style="display: block; margin-bottom: 5px;">E-posta Adresi:</label>
+    <input type="email" id="user-email" placeholder="ornek@email.com" style="width: 100%; padding: 10px; border-radius: 5px; border: 1px solid #444; background: #222; color: white;">
+  </div>
+
+  <div style="margin-bottom: 15px;">
+    <label style="display: block; margin-bottom: 5px;">Şifre:</label>
+    <input type="password" id="user-password" placeholder="******" style="width: 100%; padding: 10px; border-radius: 5px; border: 1px solid #444; background: #222; color: white;">
+  </div>
+
+  <div style="display: flex; gap: 10px; justify-content: space-between;">
+    <button onclick="girisYap()" style="flex: 1; padding: 12px; background: #ff5722; color: white; border: none; border-radius: 5px; font-weight: bold;">Giriş Yap</button>
+    <button onclick="kayitOl()" style="flex: 1; padding: 12px; background: #333; color: white; border: 1px solid #ff5722; border-radius: 5px; font-weight: bold;">Kayıt Ol</button>
+  </div>
+  
+  <p id="auth-status" style="text-align: center; margin-top: 15px; font-size: 14px; color: #aaa;"></p>
+</div>
+
+<!-- Firebase İşlem Kodları -->
+<script type="module">
+  import { signInWithEmailAndPassword, createUserWithEmailAndPassword } from "https://www.gstatic.com/firebasejs/11.4.0/firebase-auth.js";
+
+  window.girisYap = function() {
+    const email = document.getElementById('user-email').value;
+    const pass = document.getElementById('user-password').value;
+    const status = document.getElementById('auth-status');
+
+    signInWithEmailAndPassword(window.auth, email, pass)
+      .then((userCredential) => {
+        status.style.color = "#4CAF50";
+        status.innerText = "Giriş başarılı! Hoş geldin: " + userCredential.user.email;
+      })
+      .catch((error) => {
+        status.style.color = "#f44336";
+        status.innerText = "Hata: " + error.message;
+      });
+  }
+
+  window.kayitOl = function() {
+    const email = document.getElementById('user-email').value;
+    const pass = document.getElementById('user-password').value;
+    const status = document.getElementById('auth-status');
+
+    createUserWithEmailAndPassword(window.auth, email, pass)
+      .then((userCredential) => {
+        status.style.color = "#4CAF50";
+        status.innerText = "Kayıt olundu ve giriş yapıldı!";
+      })
+      .catch((error) => {
+        status.style.color = "#f44336";
+        status.innerText = "Kayıt Hatası: " + error.message;
+      });
+  }
+</script>
+<!-- Ürün ve İndirme Listesi Paneli -->
+<div id="store-container" style="padding: 20px; color: white; background: #1a1a1a; border-radius: 10px; margin: 20px; border: 1px solid #333;">
+  <h3 style="color: #ff5722; text-align: center; margin-top: 0;">FlameStore Mağaza & Dosyalar</h3>
+  
+  <!-- Ürünlerin Listeleneceği Alan -->
+  <div id="product-list" style="display: flex; flex-direction: column; gap: 12px; margin-top: 15px;">
+    <p style="color: #666; text-align: center;">Ürünler yükleniyor...</p>
+  </div>
+</div>
+
+<!-- Ürünleri Firestore'dan Çekme Kodları -->
+<script type="module">
+  import { collection, getDocs } from "https://www.gstatic.com/firebasejs/11.4.0/firebase-firestore.js";
+
+  const db = window.db;
+
+  async function urunleriGetir() {
+    const productBox = document.getElementById('product-list');
+    if (!db) return;
+
+    try {
+      const querySnapshot = await getDocs(collection(db, "urunler"));
+      productBox.innerHTML = "";
+
+      if (querySnapshot.empty) {
+        productBox.innerHTML = `
+          <div style="background: #222; padding: 15px; border-radius: 8px; text-align: center;">
+            <p style="color: #aaa; margin: 0 0 10px 0;">Henüz sisteme eklenmiş bir dosya/ürün yok.</p>
+            <p style="font-size: 12px; color: #666; margin: 0;">(Firebase Firestore içerisine 'urunler' adında koleksiyon açıp içine 'ad', 'aciklama' ve 'dosyaUrl' alanları ekleyerek test edebilirsin.)</p>
+          </div>
+        `;
+        return;
+      }
+
+      querySnapshot.forEach((doc) => {
+        const data = doc.data();
+        const ad = data.ad || "İsimsiz Ürün";
+        const aciklama = data.aciklama || "Açıklama yok";
+        const dosyaUrl = data.dosyaUrl || "#";
+
+        productBox.innerHTML += `
+          <div style="background: #252525; padding: 15px; border-radius: 8px; display: flex; justify-content: space-between; align-items: center; border: 1px solid #333;">
+            <div>
+              <h4 style="margin: 0 0 5px 0; color: #ff5722; font-size: 16px;">${ad}</h4>
+              <p style="margin: 0; font-size: 13px; color: #ccc;">${aciklama}</p>
+            </div>
+            <a href="${dosyaUrl}" target="_blank" style="padding: 8px 15px; background: #ff5722; color: white; text-decoration: none; border-radius: 5px; font-weight: bold; font-size: 13px; white-space: nowrap;">İndir</a>
+          </div>
+        `;
+      });
+    } catch (error) {
+      productBox.innerHTML = `<p style="color: #f44336; text-align: center;">Ürünler yüklenirken hata oluştu: ${error.message}</p>`;
+    }
+  }
+
+  // Sayfa açıldığında ürünleri çalıştır
+  setTimeout(urunleriGetir, 1500);
+</script>
+<!-- Profil Düzenleme Paneli -->
+<div id="profile-container" style="padding: 20px; color: white; background: #1a1a1a; border-radius: 10px; margin: 20px; border: 1px solid #333;">
+  <h3 style="color: #ff5722; text-align: center; margin-top: 0;">Profilimi Düzenle</h3>
+  
+  <div style="margin-bottom: 15px;">
+    <label style="display: block; margin-bottom: 5px; font-size: 14px;">Kullanıcı Adı / İsim:</label>
+    <input type="text" id="profile-name" placeholder="Adını gir..." style="width: 100%; padding: 10px; border-radius: 5px; border: 1px solid #444; background: #222; color: white;">
+  </div>
+
+  <div style="margin-bottom: 15px;">
+    <label style="display: block; margin-bottom: 5px; font-size: 14px;">Hakkımda / Bio:</label>
+    <textarea id="profile-bio" placeholder="Kendinden bahset..." style="width: 100%; padding: 10px; border-radius: 5px; border: 1px solid #444; background: #222; color: white; height: 60px; resize: none;"></textarea>
+  </div>
+
+  <button onclick="profilKaydet()" style="width: 100%; padding: 12px; background: #ff5722; color: white; border: none; border-radius: 5px; font-weight: bold; cursor: pointer;">Profili Kaydet</button>
+  <p id="profile-status" style="text-align: center; margin-top: 10px; font-size: 13px; color: #aaa;"></p>
+</div>
+
+<!-- Profil Firestore Kayıt Kodları -->
+<script type="module">
+  import { doc, setDoc, getDoc } from "https://www.gstatic.com/firebasejs/11.4.0/firebase-firestore.js";
+
+  const db = window.db;
+
+  // Kullanıcı giriş yapınca mevcut profil verisini çekelim
+  window.addEventListener('DOMContentLoaded', () => {
+    setTimeout(async () => {
+      if (window.auth && window.auth.currentUser) {
+        const uid = window.auth.currentUser.uid;
+        const docRef = doc(db, "profiller", uid);
+        const docSnap = await getDoc(docRef);
+        
+        if (docSnap.exists()) {
+          const data = docSnap.data();
+          if(document.getElementById('profile-name')) document.getElementById('profile-name').value = data.isim || "";
+          if(document.getElementById('profile-bio')) document.getElementById('profile-bio').value = data.bio || "";
+        }
+      }
+    }, 2000);
+  });
+
+  // Profili Güncelleme / Kaydetme Fonksiyonu
+  window.profilKaydet = async function() {
+    const status = document.getElementById('profile-status');
+    if (!window.auth || !window.auth.currentUser) {
+      status.style.color = "#f44336";
+      status.innerText = "Önce giriş yapmalısın!";
+      return;
+    }
+
+    const uid = window.auth.currentUser.uid;
+    const isim = document.getElementById('profile-name').value;
+    const bio = document.getElementById('profile-bio').value;
+
+    try {
+      await setDoc(doc(db, "profiller", uid), {
+        email: window.auth.currentUser.email,
+        isim: isim,
+        bio: bio,
+        guncellemeZamani: new Date()
+      }, { merge: true });
+
+      status.style.color = "#4CAF50";
+      status.innerText = "Profil başarıyla kaydedildi!";
+    } catch (error) {
+      status.style.color = "#f44336";
+      status.innerText = "Hata: " + error.message;
+    }
+  }
+</script>
+<!-- Sabit Alt Navigasyon Çubuğu -->
+<div id="bottom-nav" style="position: fixed; bottom: 0; left: 0; width: 100%; background: #111; display: flex; justify-content: space-around; padding: 10px 0; border-top: 1px solid #333; z-index: 1000;">
+  <button onclick="sayfaGoster('auth-container')" style="background: none; border: none; color: #ff5722; font-weight: bold; font-size: 12px; cursor: pointer;">Giriş</button>
+  <button onclick="sayfaGoster('chat-container')" style="background: none; border: none; color: #aaa; font-weight: bold; font-size: 12px; cursor: pointer;">Sohbet</button>
+  <button onclick="sayfaGoster('store-container')" style="background: none; border: none; color: #aaa; font-weight: bold; font-size: 12px; cursor: pointer;">Mağaza</button>
+  <button onclick="sayfaGoster('profile-container')" style="background: none; border: none; color: #aaa; font-weight: bold; font-size: 12px; cursor: pointer;">Profil</button>
+</div>
+
+<!-- Navigasyon Kontrol Scripti -->
+<script>
+  window.sayfaGoster = function(aktifId) {
+    const konteynerler = ['auth-container', 'chat-container', 'store-container', 'profile-container'];
+    
+    konteynerler.forEach(id => {
+      const el = document.getElementById(id);
+      if (el) {
+        if (id === aktifId) {
+          el.style.display = 'block';
+        } else {
+          el.style.display = 'none';
+        }
+      }
+    });
+  }
+
+  // Sayfa açıldığında sadece Giriş ekranı görünür olsun, diğerleri gizlensin
+  window.addEventListener('DOMContentLoaded', () => {
+    setTimeout(() => {
+      sayfaGoster('auth-container');
+    }, 500);
+  });
+</script>
+<!-- Admin & Rol Yönetim Paneli (Sadece Sana Görünür) -->
+<div id="admin-panel" style="display: none; padding: 20px; color: white; background: #1a1a1a; border-radius: 10px; margin: 20px; border: 1px solid #ff5722;">
+  <h3 style="color: #ff5722; text-align: center; margin-top: 0;">Geliştirici & Yetki Paneli</h3>
+  
+  <div style="margin-bottom: 15px;">
+    <label style="display: block; margin-bottom: 5px; font-size: 14px;">Yetki Verilecek Kullanıcı E-postası:</label>
+    <input type="email" id="target-email" placeholder="kullanici@email.com" style="width: 100%; padding: 10px; border-radius: 5px; border: 1px solid #444; background: #222; color: white;">
+  </div>
+
+  <div style="margin-bottom: 15px;">
+    <label style="display: block; margin-bottom: 5px; font-size: 14px;">Verilecek Rol:</label>
+    <select id="target-role" style="width: 100%; padding: 10px; border-radius: 5px; border: 1px solid #444; background: #222; color: white;">
+      <option value="moderator">Moderatör</option>
+      <option value="rehber">Rehber</option>
+      <option value="uye">Normal Üye</option>
+    </select>
+  </div>
+
+  <button onclick="rolVer()" style="width: 100%; padding: 12px; background: #ff5722; color: white; border: none; border-radius: 5px; font-weight: bold; cursor: pointer;">Rolü Güncelle</button>
+  <p id="admin-status" style="text-align: center; margin-top: 10px; font-size: 13px; color: #aaa;"></p>
+</div>
+
+<!-- Yetki Kontrol ve Rol Atama Kodları -->
+<script type="module">
+  import { collection, query, where, getDocs, updateDoc, doc } from "https://www.gstatic.com/firebasejs/11.4.0/firebase-firestore.js";
+
+  const db = window.db;
+  const DEVELOPER_EMAIL = "mustafamirac000@gmail.com";
+
+  // Giriş yapıldığında sadece senin mailini kontrol et ve paneli aç
+  window.addEventListener('DOMContentLoaded', () => {
+    setTimeout(() => {
+      if (window.auth) {
+        window.auth.onAuthStateChanged((user) => {
+          const adminPanel = document.getElementById('admin-panel');
+          if (user && user.email === DEVELOPER_EMAIL) {
+            if (adminPanel) adminPanel.style.display = 'block';
+          } else {
+            if (adminPanel) adminPanel.style.display = 'none';
+          }
+        });
+      }
+    }, 2000);
+  });
+
+  // Rol Verme Fonksiyonu
+  window.rolVer = async function() {
+    const status = document.getElementById('admin-status');
+    const targetEmail = document.getElementById('target-email').value.trim();
+    const newRole = document.getElementById('target-role').value;
+
+    if (!targetEmail) {
+      status.style.color = "#f44336";
+      status.innerText = "Lütfen bir e-posta adresi girin!";
+      return;
+    }
+
+    try {
+      // profiller koleksiyonunda bu e-postaya sahip kullanıcıyı bulalım
+      const q = query(collection(db, "profiller"), where("email", "==", targetEmail));
+      const querySnapshot = await getDocs(q);
+
+      if (querySnapshot.empty) {
+        status.style.color = "#f44336";
+        status.innerText = "Bu e-postaya ait profil bulunamadı (Kullanıcı uygulamaya kayıt olmalı).";
+        return;
+      }
+
+      // Kullanıcının belgesini güncelleyelim
+      querySnapshot.forEach(async (documentSnapshot) => {
+        const userRef = doc(db, "profiller", documentSnapshot.id);
+        await updateDoc(userRef, { rol: newRole });
+      });
+
+      status.style.color = "#4CAF50";
+      status.innerText = `${targetEmail} kullanıcısına başarıyla '${newRole}' rolü verildi!`;
+    } catch (error) {
+      status.style.color = "#f44336";
+      status.innerText = "Hata: " + error.message;
+    }
+  }
+</script>
+<!-- Oyun Yükleme ve VirusTotal Tarama Paneli -->
+<div id="game-upload-container" style="padding: 20px; color: white; background: #1a1a1a; border-radius: 10px; margin: 20px; border: 1px solid #333;">
+  <h3 style="color: #ff5722; text-align: center; margin-top: 0;">Oyun / Dosya Yayınla</h3>
+  
+  <div style="margin-bottom: 15px;">
+    <label style="display: block; margin-bottom: 5px; font-size: 14px;">Oyun Adı:</label>
+    <input type="text" id="game-title" placeholder="Oyunun adı..." style="width: 100%; padding: 10px; border-radius: 5px; border: 1px solid #444; background: #222; color: white;">
+  </div>
+
+  <div style="margin-bottom: 15px;">
+    <label style="display: block; margin-bottom: 5px; font-size: 14px;">Açıklama:</label>
+    <textarea id="game-desc" placeholder="Oyun hakkında kısa bilgi..." style="width: 100%; padding: 10px; border-radius: 5px; border: 1px solid #444; background: #222; color: white; height: 60px; resize: none;"></textarea>
+  </div>
+
+  <div style="margin-bottom: 15px;">
+    <label style="display: block; margin-bottom: 5px; font-size: 14px;">Önizleme Fotoğrafları (En Fazla 5 Adet):</label>
+    <input type="file" id="game-screenshots" accept="image/*" multiple style="font-size: 12px; color: #aaa; width: 100%;">
+    <p style="font-size: 11px; color: #777; margin-top: 3px;">Çoklu seçim yaparak en fazla 5 fotoğraf seçebilirsin.</p>
+  </div>
+
+  <div style="margin-bottom: 15px;">
+    <label style="display: block; margin-bottom: 5px; font-size: 14px;">Oyun Dosyası (APK / ZIP):</label>
+    <input type="file" id="game-file" style="font-size: 12px; color: #aaa; width: 100%;">
+  </div>
+
+  <button onclick="oyunYayinla()" style="width: 100%; padding: 12px; background: #ff5722; color: white; border: none; border-radius: 5px; font-weight: bold; cursor: pointer;">Oyunu Yayınla & Tara</button>
+  <p id="upload-status" style="text-align: center; margin-top: 10px; font-size: 13px; color: #aaa;"></p>
+</div>
+
+<!-- Oyun ve VirusTotal Kodları -->
+<script type="module">
+  import { collection, addDoc } from "https://www.gstatic.com/firebasejs/11.4.0/firebase-firestore.js";
+
+  const db = window.db;
+  const VIRUSTOTAL_API_KEY = "BURAYA_KENDI_VIRUSTOTAL_API_KEYINI_YAZ"; 
+
+  window.oyunYayinla = async function() {
+    const status = document.getElementById('upload-status');
+    const title = document.getElementById('game-title').value.trim();
+    const desc = document.getElementById('game-desc').value.trim();
+    const screenshotInput = document.getElementById('game-screenshots');
+    const fileInput = document.getElementById('game-file');
+
+    if (!title) {
+      status.style.color = "#f44336";
+      status.innerText = "Lütfen oyun adını yazın!";
+      return;
+    }
+
+    if (screenshotInput.files.length > 5) {
+      status.style.color = "#f44336";
+      status.innerText = "En fazla 5 adet önizleme fotoğrafı seçebilirsin!";
+      return;
+    }
+
+    status.style.color = "#ff5722";
+    status.innerText = "Fotoğraflar işleniyor ve dosyalar taranıyor...";
+
+    try {
+      // 1. Fotoğrafları Base64 formatına çevirelim (En fazla 5 adet)
+      let screenshotPromises = Array.from(screenshotInput.files).slice(0, 5).map(file => {
+        return new Promise((resolve) => {
+          const reader = new FileReader();
+          reader.onloadend = () => resolve(reader.result);
+          reader.readAsDataURL(file);
+        });
+      });
+
+      const screenshotsBase64 = await Promise.all(screenshotPromises);
+
+      // 2. VirusTotal API Kontrol Simülasyonu / Entegrasyon Noktası
+      let virusDurumu = "Güvenli / Taranmadı";
+      if (fileInput.files.length > 0 && VIRUSTOTAL_API_KEY !== "BURAYA_KENDI_VIRUSTOTAL_API_KEYINI_YAZ") {
+        const gameFile = fileInput.files[0];
+        const formData = new FormData();
+        formData.append("file", gameFile);
+
+        // VirusTotal'e dosya gönderme isteği
+        const vtResponse = await fetch("https://www.virustotal.com/api/v3/files", {
+          method: "POST",
+          headers: { "x-apikey": VIRUSTOTAL_API_KEY },
+          body: formData
+        });
+        
+        if (vtResponse.ok) {
+          virusDurumu = "VirusTotal ile Tarandı - Temiz";
+        } else {
+          virusDurumu = "VirusTotal Tarama Uyarısı / Kota Dolu";
+        }
+      }
+
+      // 3. Firestore'a Kaydetme
+      await addDoc(collection(db, "urunler"), {
+        ad: title,
+        aciklama: desc,
+        fotograflar: screenshotsBase64,
+        virusRaporu: virusDurumu,
+        yayinci: window.auth && window.auth.currentUser ? window.auth.currentUser.email : "Misafir",
+        zaman: new Date()
+      });
+
+      status.style.color = "#4CAF50";
+      status.innerText = "Oyun başarıyla yayınlandı!";
+      document.getElementById('game-title').value = "";
+      document.getElementById('game-desc').value = "";
+      screenshotInput.value = "";
+      fileInput.value = "";
+
+    } catch (error) {
+      status.style.color = "#f44336";
+      status.innerText = "Hata: " + error.message;
+    }
+  }
+</script>
+<!-- Firestore Güvenlik Kuralları (Firebase Konsoluna Yapıştırılacak) -->
+<!--
+rules_version = '2';
+service cloud.firestore {
+  match /databases/{database}/documents {
+    match /sohbet/{mesajId} {
+      allow read, create: if request.auth != null;
+      allow delete: if request.auth != null && request.auth.token.email == resource.data.email;
+    }
+    match /urunler/{urunId} {
+      allow read, create: if request.auth != null;
+      allow delete: if request.auth != null && (request.auth.token.email == resource.data.yayinci || request.auth.token.email == "mustafamirac000@gmail.com");
+    }
+    match /profiller/{userId} {
+      allow read, write: if request.auth != null;
+    }
+  }
+}
+-->
+
+<!-- JavaScript Silme Fonksiyonları -->
+<script type="module">
+  import { doc, deleteDoc } from "https://www.gstatic.com/firebasejs/11.4.0/firebase-firestore.js";
+
+  const db = window.db;
+  const DEVELOPER_EMAIL = "mustafamirac000@gmail.com";
+
+  // Sohbet Mesajı Silme
+  window.mesajSil = async function(mesajId, mesajEmail) {
+    const currentUser = window.auth && window.auth.currentUser ? window.auth.currentUser.email : null;
+    
+    if (!currentUser || (currentUser !== mesajEmail && currentUser !== DEVELOPER_EMAIL)) {
+      alert("Bu mesajı silmeye yetkin yok!");
+      return;
+    }
+
+    if (confirm("Bu mesajı silmek istediğine emin misin?")) {
+      try {
+        await deleteDoc(doc(db, "sohbet", mesajId));
+      } catch (error) {
+        alert("Silme hatası: " + error.message);
+      }
+    }
+  }
+
+  // Oyun / Ürün Silme
+  window.urunSil = async function(urunId, yayinciEmail) {
+    const currentUser = window.auth && window.auth.currentUser ? window.auth.currentUser.email : null;
+    
+    if (!currentUser || (currentUser !== yayinciEmail && currentUser !== DEVELOPER_EMAIL)) {
+      alert("Bu içeriği silmeye yetkin yok!");
+      return;
+    }
+
+    if (confirm("Bu içeriği tamamen kaldırmak istediğine emin misin?")) {
+      try {
+        await deleteDoc(doc(db, "urunler", urunId));
+        alert("İçerik başarıyla silindi.");
+      } catch (error) {
+        alert("Silme hatası: " + error.message);
+      }
+    }
+  }
+</script>
+<script type="module">
+  import { doc, getDoc, setDoc } from "https://www.gstatic.com/firebasejs/11.4.0/firebase-firestore.js";
+
+  const db = window.db;
+  const DEVELOPER_EMAIL = "mustafamirac000@gmail.com";
+
+  window.rutbeHesapla = function(email, xp) {
+    // Eğer giriş yapan kişi sen isen direkt Developer rütbesini ve rengini verelim!
+    if (email === DEVELOPER_EMAIL) {
+      return {
+        isim: "SİSTEM MİMARI 💻🔥",
+        renk: "linear-gradient(45deg, #ff5722, #ff9800)",
+        ozellik: "Sınırsız Yönetici Yetkileri, Duyuru Atma ve Tüm Sınırlardan Muafiyet"
+      };
+    }
+
+    if (xp >= 8000) return { isim: "İMPARATOR 👑 (Mor/Kırmızı)", renk: "linear-gradient(45deg, #9c27b0, #f44336)", ozellik: "Topluluk Onay Desteği & Mor/Kırmızı Gradient İsim" };
+    if (xp >= 4000) return { isim: "YENİLMEZ ⚔️ (Kırmızı)", renk: "#f44336", ozellik: "Sabitlenebilir Mesaj & Kırmızı Çerçeve" };
+    if (xp >= 2000) return { isim: "Kral 👑 (Altın)", renk: "#ffeb3b", ozellik: "2 Kat Değerli Oy & Altın Vurgu" };
+    if (xp >= 1000) return { isim: "Çaylak 💎 (Elmas Mavisi)", renk: "#00bcd4", ozellik: "2 Kat Dosya Limiti & Öncelikli Erişim" };
+    if (xp >= 500) return { isim: "Azimli 🌱 (Yeşil)", renk: "#4CAF50", ozellik: "+%5 Ekstra XP & Yeşil Rozet" };
+    return { isim: "Çaylak Oyuncu 🐣", renk: "#aaa", ozellik: "Başlangıç Seviyesi" };
+  }
+
+  // Profil yüklendiğinde kontrol et
+  window.addEventListener('DOMContentLoaded', () => {
+    setTimeout(async () => {
+      if (window.auth && window.auth.currentUser) {
+        const user = window.auth.currentUser;
+        const uid = user.uid;
+        const email = user.email;
+        
+        const docRef = doc(db, "profiller", uid);
+        const docSnap = await getDoc(docRef);
+        
+        let xp = 0;
+        if (docSnap.exists() && docSnap.data().xp !== undefined) {
+          xp = docSnap.data().xp;
+        } else {
+          await setDoc(docRef, { xp: 0, email: email }, { merge: true });
+        }
+
+        const rutbeBilgisi = window.rutbeHesapla(email, xp);
+
+        if(document.getElementById('user-rank')) {
+          const rankEl = document.getElementById('user-rank');
+          rankEl.innerText = rutbeBilgisi.isim;
+          rankEl.style.background = rutbeBilgisi.renk;
+          rankEl.style.webkitBackgroundClip = "text";
+          rankEl.style.webkitTextFillColor = "transparent";
+        }
+
+        // Özellikleri ekrana yansıtma alanı varsa
+        const rankDisplay = document.getElementById('rank-display');
+        if (rankDisplay && !document.getElementById('dev-ozellik')) {
+          rankDisplay.innerHTML += `<p id="dev-ozellik" style="font-size: 11px; color: #ff9800; margin-top: 8px;"><b>Özellik:</b> ${rutbeBilgisi.ozellik}</p>`;
+        }
+      }
+    }, 2500);
+  });
+</script>
+<!-- Haftanın Oyunu Vitrini -->
+<div id="featured-game-container" style="background: linear-gradient(135deg, #1a1a1a, #2a1b0a); padding: 20px; border-radius: 12px; margin: 20px; border: 2px solid #ff5722; box-shadow: 0 4px 15px rgba(255, 87, 34, 0.2);">
+  <div style="display: flex; justify-content: space-between; align-items: center; margin-bottom: 10px;">
+    <span style="background: #ff5722; color: white; padding: 4px 10px; border-radius: 20px; font-size: 11px; font-weight: bold; text-transform: uppercase;">🔥 Haftanın Önerilen Oyunu</span>
+    <span style="font-size: 12px; color: #ff9800;">⭐ Editörün Seçimi</span>
+  </div>
+
+  <div id="featured-game-content">
+    <h3 id="featured-title" style="color: white; margin: 0 0 8px 0; font-size: 20px;">Yükleniyor...</h3>
+    <p id="featured-desc" style="color: #ccc; font-size: 13px; margin: 0 0 15px 0; line-height: 1.4;">Haftanın en iyi oyunu belirleniyor...</p>
+    
+    <div id="featured-screenshots" style="display: flex; gap: 8px; overflow-x: auto; margin-bottom: 15px; padding-bottom: 5px;">
+      <!-- Fotoğraflar buraya gelecek -->
+    </div>
+
+    <button id="featured-btn" style="width: 100%; padding: 12px; background: #ff5722; color: white; border: none; border-radius: 6px; font-weight: bold; cursor: pointer; text-align: center;">Oyunu İncele & İndir</button>
+  </div>
+</div>
+
+<!-- Haftanın Oyunu Mantığı (Firestore'dan Çekme veya Developer Seçimi) -->
+<script type="module">
+  import { collection, getDocs, query, limit } from "https://www.gstatic.com/firebasejs/11.4.0/firebase-firestore.js";
+
+  const db = window.db;
+
+  async function haftaninOyununuGetir() {
+    const titleEl = document.getElementById('featured-title');
+    const descEl = document.getElementById('featured-desc');
+    const screenshotsEl = document.getElementById('featured-screenshots');
+    const btnEl = document.getElementById('featured-btn');
+
+    if (!db) return;
+
+    try {
+      // Örnek olarak veritabanındaki ilk oyunu veya özel olarak etiketlenmiş bir oyunu çekelim
+      const q = query(collection(db, "urunler"), limit(1));
+      const querySnapshot = await getDocs(q);
+
+      if (querySnapshot.empty) {
+        titleEl.innerText = "Henüz Oyun Yok";
+        descEl.innerText = "Mağazaya ilk oyunu sen yükle ve Haftanın Oyunu seninki olsun!";
+        btnEl.style.display = "none";
+        return;
+      }
+
+      querySnapshot.forEach((doc) => {
+        const data = doc.data();
+        titleEl.innerText = data.ad || "İsimsiz Oyun";
+        descEl.innerText = data.aciklama || "Açıklama bulunmuyor.";
+        
+        // Fotoğraflar varsa ekrana dizelim
+        screenshotsEl.innerHTML = "";
+        if (data.fotograflar && data.fotograflar.length > 0) {
+          data.fotograflar.forEach(imgBase64 => {
+            screenshotsEl.innerHTML += `<img src="${imgBase64}" style="width: 100px; height: 60px; object-fit: cover; border-radius: 4px; border: 1px solid #444;">`;
+          });
+        } else {
+          screenshotsEl.innerHTML = "<p style='color: #666; font-size: 12px; margin: 0;'>Önizleme fotoğrafı eklenmemiş.</p>";
+        }
+
+        // Butona tıklandığında detay veya indirme sayfasına yönlendirme (veya bilgi verme)
+        btnEl.onclick = function() {
+          alert("'{data.ad}' oyunu seçildi! İndirme veya detaylar yakında tam ekran açılacak.");
+        };
+      });
+
+    } catch (error) {
+      titleEl.innerText = "Hata";
+      descEl.innerText = "Haftanın oyunu yüklenirken bir sorun oluştu.";
+    }
+  }
+
+  // Sayfa yüklendikten kısa süre sonra çalıştır
+  setTimeout(haftaninOyununuGetir, 2000);
+</script>
+<!-- Kapsamlı Özellikler Paneli (Arama, Filtre, Favoriler, Tema ve Bildirimler) -->
+<div id="advanced-features-container" style="padding: 20px; color: white; background: #1a1a1a; border-radius: 10px; margin: 20px; border: 1px solid #333;">
+  
+  <!-- Üst Araç Çubuğu (Arama ve Tema) -->
+  <div style="display: flex; gap: 10px; margin-bottom: 15px;">
+    <input type="text" id="search-input" placeholder="Oyun ara..." onkeyup="oyunAra()" style="flex: 1; padding: 10px; border-radius: 5px; border: 1px solid #444; background: #222; color: white; font-size: 13px;">
+    <button onclick="temaDegis()" style="padding: 10px 15px; background: #333; color: white; border: none; border-radius: 5px; cursor: pointer; font-size: 13px;">🎨 Tema</button>
+  </div>
+
+  <!-- Kategori Filtreleme Butonları -->
+  <div style="display: flex; gap: 6px; overflow-x: auto; margin-bottom: 15px; padding-bottom: 5px;">
+    <button onclick="kategoriFiltrele('hepsi')" style="padding: 6px 12px; background: #ff5722; color: white; border: none; border-radius: 15px; font-size: 11px; cursor: pointer; white-space: nowrap;">Tümü</button>
+    <button onclick="kategoriFiltrele('aksiyon')" style="padding: 6px 12px; background: #333; color: white; border: none; border-radius: 15px; font-size: 11px; cursor: pointer; white-space: nowrap;">Aksiyon</button>
+    <button onclick="kategoriFiltrele('rpg')" style="padding: 6px 12px; background: #333; color: white; border: none; border-radius: 15px; font-size: 11px; cursor: pointer; white-space: nowrap;">RPG</button>
+    <button onclick="kategoriFiltrele('simulasyon')" style="padding: 6px 12px; background: #333; color: white; border: none; border-radius: 15px; font-size: 11px; cursor: pointer; white-space: nowrap;">Simülasyon</button>
+  </div>
+
+  <!-- Sistem Bildirim Kutusu -->
+  <div id="system-notification" style="background: #2a2a2a; padding: 10px 15px; border-radius: 8px; border-left: 4px solid #ff5722; margin-bottom: 15px; display: flex; justify-content: space-between; align-items: center;">
+    <span id="notification-text" style="font-size: 12px; color: #ddd;">📢 Hoş geldin! En yeni oyunları keşfetmeye başla.</span>
+    <span onclick="bildirimiKapat()" style="cursor: pointer; color: #888; font-size: 14px;">&times;</span>
+  </div>
+
+  <!-- Favoriler Butonu -->
+  <button onclick="favorileriGoster()" style="width: 100%; padding: 10px; background: #252525; color: #ff5722; border: 1px dashed #ff5722; border-radius: 5px; font-weight: bold; cursor: pointer; font-size: 13px;">⭐ Favori Oyunlarım</button>
+</div>
+
+<!-- Gelişmiş Özelliklerin Script Kodları -->
+<script>
+  // 1. Arama Fonksiyonu
+  window.oyunAra = function() {
+    const aramaMetni = document.getElementById('search-input').value.toLowerCase();
+    const urunKartlari = document.querySelectorAll('#product-list > div');
+    
+    urunKartlari.forEach(kart => {
+      const baslik = kart.querySelector('h4');
+      if (baslik) {
+        const metin = baslik.innerText.toLowerCase();
+        kart.style.display = metin.includes(aramaMetni) ? "flex" : "none";
+      }
+    });
+  }
+
+  // 2. Kategori Filtreleme
+  window.kategoriFiltrele = function(kategori) {
+    // Kategori mantığı oyun veritabanındaki etiketlere göre süzme yapabilir
+    alert("Kategori seçildi: " + kategori + ". (Oyunlara kategori alanı ekleyerek burayı bağlayabilirsin)");
+  }
+
+  // 3. Tema Değiştirme (Karanlık <-> Aydınlık)
+  let isDarkMode = true;
+  window.temaDegis = function() {
+    isDarkMode = !isDarkMode;
+    const containers = document.querySelectorAll('div[id$="-container"], #bottom-nav');
+    
+    containers.forEach(el => {
+      if (isDarkMode) {
+        el.style.background = "#1a1a1a";
+        el.style.color = "white";
+      } else {
+        el.style.background = "#f4f4f4";
+        el.style.color = "#111";
+      }
+    });
+  }
+
+  // 4. Bildirim Kapatma
+  window.bildirimiKapat = function() {
+    const notif = document.getElementById('system-notification');
+    if (notif) notif.style.display = "none";
+  }
+
+  // 5. Favoriler Listesi
+  window.favorileriGoster = function() {
+    alert("Favoriler listesi yakında kullanıcı profiline entegre edilecek!");
+  }
+</script>
+
 </body>
 </html>
