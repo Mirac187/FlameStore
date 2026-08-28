@@ -24,29 +24,23 @@ jobs:
 
       - name: Dosyaları Hazırla ve Derle
         run: |
-          # 1. Önce www klasörünü açıp index.html ve dosyalarımızı içine koyalım
           mkdir -p www
           cp -f index.html www/
           cp -r assets js css src www/ 2>/dev/null || true
 
-          # 2. Node paketlerini kuralım
           npm init -y
           npm install @capacitor/core @capacitor/cli @capacitor/android @capacitor/assets
 
-          # 3. Capacitor'ı web-dir parametresiyle başlatalım (Artık www içinde index.html var)
           npx cap init FlameStore com.flamestore.app --web-dir www
-
-          # 4. Android platformunu ekleyelim
           npx cap add android
 
-          # 5. İkon üretimi (varsa)
+          # İkon komutunu hatasız hale getirdik:
           if [ -f "assets/icon.png" ]; then
-            npx @capacitor/assets generate --android --iconOnly
+            npx @capacitor/assets generate --android
           fi
 
           npx cap sync
           
-          # 6. Kotlin çakışma çözümü
           echo "configurations.all { exclude group: 'org.jetbrains.kotlin', module: 'kotlin-stdlib-jdk7'; exclude group: 'org.jetbrains.kotlin', module: 'kotlin-stdlib-jdk8' }" >> android/app/build.gradle
           
           chmod +x android/gradlew
