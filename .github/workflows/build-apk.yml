@@ -22,17 +22,18 @@ jobs:
           distribution: 'zulu'
           java-version: '21'
 
-      - name: Dosyaları Hazırla ve Derle
+            - name: Dosyaları Hazırla ve Derle
         run: |
           mkdir -p www
-          cp -r *.html *.js *.css assets js css src 2>/dev/null || true
+          # index.html dosyasını kesin olarak www içine kopyala ve kontrol et:
+          cp index.html www/
+          cp -r assets js css src www/ 2>/dev/null || true
           
           npm init -y
           npm install @capacitor/core @capacitor/cli @capacitor/android @capacitor/assets
           npx cap init FlameStore com.flamestore.app --web-dir www
           npx cap add android
           
-          # Bu komut assets/icon.png dosyasını bulup Android simgesine dönüştürür:
           if [ -f "assets/icon.png" ]; then
             npx @capacitor/assets generate --android --iconOnly
           fi
@@ -43,6 +44,7 @@ jobs:
           
           chmod +x android/gradlew
           cd android && ./gradlew assembleDebug
+
 
       - name: APK Dosyasını Yükle
         uses: actions/upload-artifact@v4
