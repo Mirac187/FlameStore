@@ -22,18 +22,23 @@ jobs:
           distribution: 'zulu'
           java-version: '21'
 
-      - name: Paketleri ve APK'yı Derle
+      - name: Dosyaları Hazırla ve Derle
         run: |
           mkdir -p www
-          cp -r index.html assets *.html *.css *.js www/ 2>/dev/null || true
+          cp -r *.html *.js *.css assets js css src 2>/dev/null || true
+          
           npm init -y
           npm install @capacitor/core @capacitor/cli @capacitor/android @capacitor/assets
           npx cap init FlameStore com.flamestore.app --web-dir www
           npx cap add android
-          if [ -f "assets/icon.png" ]; then npx @capacitor/assets generate --android; fi
+          
+          # Bu komut assets/icon.png dosyasını bulup Android simgesine dönüştürür:
+          if [ -f "assets/icon.png" ]; then
+            npx @capacitor/assets generate --android --iconOnly
+          fi
+          
           npx cap sync
           
-          # Kotlin çakışmasını (Duplicate Class) çözen kritik ekleme:
           echo "configurations.all { exclude group: 'org.jetbrains.kotlin', module: 'kotlin-stdlib-jdk7'; exclude group: 'org.jetbrains.kotlin', module: 'kotlin-stdlib-jdk8' }" >> android/app/build.gradle
           
           chmod +x android/gradlew
