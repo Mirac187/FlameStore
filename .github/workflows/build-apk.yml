@@ -24,17 +24,17 @@ jobs:
 
       - name: Dosyaları Hazırla ve Derle
         run: |
-          # 1. Önce Node projesini başlatıp paketleri kuralım
-          npm init -y
-          npm install @capacitor/core @capacitor/cli @capacitor/android @capacitor/assets
-
-          # 2. Capacitor'ı elle başlatmak yerine config dosyası ile kuralım (Hata vermesini önler)
-          npx cap init FlameStore com.flamestore.app --web-dir www --yes
-
-          # 3. www klasörünü oluşturup index.html ve diğer dosyaları içine atalım
+          # 1. Önce www klasörünü açıp index.html ve dosyalarımızı içine koyalım
           mkdir -p www
           cp -f index.html www/
           cp -r assets js css src www/ 2>/dev/null || true
+
+          # 2. Node paketlerini kuralım
+          npm init -y
+          npm install @capacitor/core @capacitor/cli @capacitor/android @capacitor/assets
+
+          # 3. Capacitor'ı web-dir parametresiyle başlatalım (Artık www içinde index.html var)
+          npx cap init FlameStore com.flamestore.app --web-dir www
 
           # 4. Android platformunu ekleyelim
           npx cap add android
