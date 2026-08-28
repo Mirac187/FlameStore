@@ -22,29 +22,35 @@ jobs:
           distribution: 'zulu'
           java-version: '21'
 
-            - name: Dosyaları Hazırla ve Derle
+      - name: Dosyaları Hazırla ve Derle
         run: |
-          mkdir -p www
-          # index.html dosyasını kesin olarak www içine kopyala ve kontrol et:
-          cp index.html www/
-          cp -r assets js css src www/ 2>/dev/null || true
-          
+          # 1. Önce Node projesini başlatıp paketleri kuralım
           npm init -y
           npm install @capacitor/core @capacitor/cli @capacitor/android @capacitor/assets
-          npx cap init FlameStore com.flamestore.app --web-dir www
+
+          # 2. Capacitor'ı elle başlatmak yerine config dosyası ile kuralım (Hata vermesini önler)
+          npx cap init FlameStore com.flamestore.app --web-dir www --yes
+
+          # 3. www klasörünü oluşturup index.html ve diğer dosyaları içine atalım
+          mkdir -p www
+          cp -f index.html www/
+          cp -r assets js css src www/ 2>/dev/null || true
+
+          # 4. Android platformunu ekleyelim
           npx cap add android
-          
+
+          # 5. İkon üretimi (varsa)
           if [ -f "assets/icon.png" ]; then
             npx @capacitor/assets generate --android --iconOnly
           fi
-          
+
           npx cap sync
           
+          # 6. Kotlin çakışma çözümü
           echo "configurations.all { exclude group: 'org.jetbrains.kotlin', module: 'kotlin-stdlib-jdk7'; exclude group: 'org.jetbrains.kotlin', module: 'kotlin-stdlib-jdk8' }" >> android/app/build.gradle
           
           chmod +x android/gradlew
           cd android && ./gradlew assembleDebug
-
 
       - name: APK Dosyasını Yükle
         uses: actions/upload-artifact@v4
